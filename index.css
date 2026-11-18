@@ -1,0 +1,14 @@
+*{box-sizing:border-box}
+body{margin:0;height:100vh;font:13px system-ui,sans-serif;background:#f4f4f6;color:#222;position:relative;overflow:hidden}
+label{position:absolute;top:8px;left:8px;font-weight:600}
+.l2{left:calc(33.333% + 5px)}
+.l3{left:calc(66.666% + 3px)}
+.t{position:absolute;top:30px;bottom:8px;width:calc(33.333% - 11px);font:12px monospace;padding:8px;border:1px solid #bbb;border-radius:6px;background:#fff;resize:none}
+.c1{left:8px}
+.c2{left:calc(33.333% + 5px)}
+.c3{left:calc(66.666% + 3px);background:#eaeaee}
+@media (max-width:800px){
+  body{overflow:auto;height:auto}
+  label,.t{position:static;width:auto;display:block;margin:8px}
+  .t{height:50vh;width:calc(100% - 16px)}
+}
