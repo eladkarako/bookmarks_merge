@@ -7,12 +7,15 @@
 <link rel="stylesheet" href="index.css">
 </head>
 <body>
-<label for="in1">Input 1: bookmarks HTML</label>
-<textarea id="in1" class="t c1" spellcheck="false"></textarea>
-<label class="l2" for="in2">Input 2: bookmarks HTML</label>
-<textarea id="in2" class="t c2" spellcheck="false"></textarea>
-<label class="l3" for="out">Output: merged result</label>
-<textarea id="out" class="t c3" spellcheck="false" readonly></textarea>
-<script defer="defer" src="index.js"></script>
+<label class="label column_1" for="input_1">Input 1: bookmarks HTML</label>
+<textarea id="input_1" class="panel column_1" spellcheck="false"></textarea>
+
+<label class="label column_2" for="input_2">Input 2: bookmarks HTML</label>
+<textarea id="input_2" class="panel column_2" spellcheck="false"></textarea>
+
+<label class="label column_3" for="output_area">Output: merged result</label>
+<textarea id="output_area" class="panel panel_output column_3" spellcheck="false" readonly></textarea>
+
+<script src="index.js"></script>
 </body>
 </html>
