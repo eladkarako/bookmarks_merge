@@ -2,6 +2,10 @@
 // false: folders and bookmarks are sorted together by title.
 const folders_first = false;
 
+// Sorting options for titles. Set to false to disable a rule.
+const ignore_leading_symbols = true;
+const ignore_leading_articles = true;
+
 // Control characters that are illegal in HTML, usually left behind by damaged exports.
 const illegal_characters = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
@@ -16,6 +20,65 @@ const indent_unit = '    ';
 const input_1 = document.getElementById('input_1');
 const input_2 = document.getElementById('input_2');
 const output_area = document.getElementById('output_area');
+
+
+// ---------- Natural compare (adapted from eladkarako's natural_compare.js gist) ----------
+
+if (typeof Intl === 'undefined') {
+  throw new Error('Intl is not available in this environment.');
+}
+
+const collator_options = {
+  usage: 'sort',
+  sensitivity: 'base',
+  ignorePunctuation: false,
+  numeric: true
+};
+const collator = new Intl.Collator(undefined, collator_options);
+
+// Runs the extraction rule on a value before comparing it.
+function extract_value(value) {
+  const extraction_rule = natural_compare.extraction_rule || ((raw) => raw);
+  return extraction_rule(value);
+}
+
+// Booleans become 0 or 1. null, undefined and NaN become 0.
+function normalize_type(value) {
+  let normalized = typeof value === 'boolean' ? Number(value) : value;
+  normalized = (normalized == null || Number.isNaN(normalized)) ? 0 : normalized;
+  return normalized;
+}
+
+// Compares two values in natural order: 1 < 2 < 10 < 20.
+function natural_compare(first_value, second_value) {
+  const first_normalized = normalize_type(extract_value(first_value));
+  const second_normalized = normalize_type(extract_value(second_value));
+
+  if (typeof first_normalized === 'number' && typeof second_normalized === 'number') {
+    return (first_normalized > second_normalized) - (first_normalized < second_normalized);
+  }
+
+  const first_text = String(first_normalized);
+  const second_text = String(second_normalized);
+
+  // The code-unit tie-break keeps the order deterministic when the collator sees equal text.
+  return collator.compare(first_text, second_text)
+    || ((first_text > second_text) - (first_text < second_text));
+}
+
+// Pre-modifies a title before comparison so the sort focuses on the meaningful part.
+function title_sort_key(raw_title) {
+  let key = raw_title;
+  if (ignore_leading_symbols) {
+    key = key.replace(/^[^\p{L}\p{N}]+/u, '');   // [, #, quotes, emoji, punctuation
+  }
+  if (ignore_leading_articles) {
+    key = key.replace(/^(the|a|an)\s+/i, '');     // "The Verge" sorts as "Verge"
+  }
+  return key;
+}
+
+natural_compare.extraction_rule = title_sort_key;
 
 
 // ---------- Tree helpers ----------
@@ -54,8 +117,8 @@ function add_bookmark(anchor_element, target_folder) {
 
 function sanitize_input(raw_html) {
   return raw_html
-    .replace(/^\uFEFF/, '')                 // byte order mark
-    .replace(illegal_characters, '');       // illegal control characters
+    .replace(/^\uFEFF/, '')            // byte order mark
+    .replace(illegal_characters, '');  // illegal control characters
 }
 
 // Walks the parsed DOM and keeps only folders, bookmarks and their titles and URLs.
@@ -100,11 +163,7 @@ function compare_nodes(first_node, second_node) {
   if (folders_first && first_node.kind !== second_node.kind) {
     return first_node.kind === 'folder' ? -1 : 1;
   }
-  const first_key = first_node.title.toLowerCase();
-  const second_key = second_node.title.toLowerCase();
-  if (first_key < second_key) return -1;
-  if (first_key > second_key) return 1;
-  return 0;
+  return natural_compare(first_node.title, second_node.title);
 }
 
 // Within each folder, keeps the first bookmark for each URL (case-insensitive),
