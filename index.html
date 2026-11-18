@@ -1,21 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bookmark Merger</title>
-<link rel="stylesheet" href="index.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmark Merger</title>
+  <link rel="stylesheet" href="index.css">
+  <input type="file" hidden />
 </head>
 <body>
-<label class="label column_1" for="input_1">Input 1: bookmarks HTML</label>
-<textarea id="input_1" class="panel column_1" spellcheck="false"></textarea>
-
-<label class="label column_2" for="input_2">Input 2: bookmarks HTML</label>
-<textarea id="input_2" class="panel column_2" spellcheck="false"></textarea>
-
-<label class="label column_3" for="output_area">Output: merged result</label>
-<textarea id="output_area" class="panel panel_output column_3" spellcheck="false" readonly></textarea>
-
-<script src="index.js"></script>
+<table>
+  <thead>
+    <tr>
+      <td>input 1</td>
+      <td>input 2</td>
+      <td>output</td>
+    </tr>
+    <tr>
+      <td><button data-upload1>📂</button></td>
+      <td><button data-upload2>📂</button></td>
+      <td><button data-download>💾</button></td>
+    </tr>
+  </thead>
+  <tbody>
+  <tr>
+    <td><textarea data-input1></textarea></td>
+    <td><textarea data-input2></textarea></td>
+    <td><textarea data-output readonly></textarea></td>
+  </tr>
+  </tbody>
+</table>
+<script async="async" defer="defer" src="index.js"></script>
 </body>
 </html>

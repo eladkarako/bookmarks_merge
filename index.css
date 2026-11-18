@@ -1,59 +1,35 @@
-* {
-  box-sizing: border-box;
+*{
+  box-sizing      : border-box;
+  border          : 1px solid gray;
+  outline         : 0px none transparent;
+  border-spacing  : 0pt;
+  border-collapse : collapse;
 }
 
-body {
-  position: relative;
-  height: 100vh;
-  margin: 0;
-  overflow: hidden;
-  font: 13px system-ui, sans-serif;
-  background: #f4f4f6;
-  color: #222;
+html, body, table, td>*{ height:100%; width:100%; }
+thead{ height:10%; }
+
+html{
+  font-family: monospace;
+  font-size: 12pt;
+  margin:0pt;
+  padding:0pt;
+  background-color:black;
+  color:yellow;
 }
 
-.label {
-  position: absolute;
-  top: 8px;
-  font-weight: 600;
+body{
+  margin:0pt;
+  padding:0pt;
 }
 
-.panel {
-  position: absolute;
-  top: 30px;
-  bottom: 8px;
-  width: calc(33.333% - 11px);
-  padding: 8px;
-  border: 1px solid #bbb;
-  border-radius: 6px;
-  background: #fff;
-  font: 12px/1.4 monospace;
-  resize: none;
+textarea{
+  overflow: auto;
 }
 
-.panel_output {
-  background: #eaeaee;
-}
-
-.column_1 { left: 8px; }
-.column_2 { left: calc(33.333% + 5px); }
-.column_3 { left: calc(66.666% + 3px); }
-
-@media (max-width: 800px) {
-  body {
-    height: auto;
-    overflow: auto;
-  }
-
-  .label,
-  .panel {
-    position: static;
-    display: block;
-    width: auto;
-    margin: 8px;
-  }
-
-  .panel {
-    height: 50vh;
-  }
+body,table,tbody,thead,td,tr,button,textarea {
+  background-color:inherit;
+  color:inherit;
+  font-size: inherit;
+  font-family: inherit;
 }
