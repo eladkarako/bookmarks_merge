@@ -1,3 +1,70 @@
+const textarea1 = document.querySelectorAll('textarea["data-input1"]')
+     ,textarea2 = document.querySelectorAll('textarea["data-input2"]')
+     ,textarea3 = document.querySelectorAll('textarea["data-output"]')
+     ,button1   = document.querySelectorAll('button["data-upload1"]')
+     ,button2   = document.querySelectorAll('button["data-upload2"]')
+     ,button3   = document.querySelectorAll('button["data-download"]')
+     ,open_file = document.querySelectorAll('input[type="file"]')
+     ,save_file = document.querySelectorAll('a[download]')
+     ;
+
+open_file.addEventListener("change", (ev)=>{
+  if(!opener.files || 0 === opener.files.length){return false;}
+  let target = open_file.getAttribute("data-target");
+       if("textarea1" === target){ target = textarea1; }
+  else if("textarea2" === target){ target = textarea2; }
+  else if("textarea3" === target){ target = textarea3; }
+
+  (async()=>{
+    target.value = await open_file.files[0].text();
+  })();
+});
+
+button1.addEventListener("click",(ev)=>{
+  opener.value = "";
+  opener.setAttribute("data-target","textarea1");
+  opener.click();
+},{capture:false, passive:false, once:false});
+
+button2.addEventListener("click",(ev)=>{
+  opener.value = "";
+  opener.setAttribute("data-target","textarea1");
+  opener.click();
+},{capture:false, passive:false, once:false});
+
+button3.addEventListener("click",(ev)=>{
+  const date = new Date();
+  save_file.download = date.toISOString()
+                            .replace(/\..*$/,"")
+                            .replace(/[\-\:]/ig,"")
+                            .replace(/T/i,"_")
+                      + ".html"
+                      ;
+  let href;
+  try{
+    href = new Blob([textarea3.value],{type:"text/html;charset=UTF-8"});
+    href = new File([href], save_file.download, {"LastModified": date});
+    save_file.href = self.URL.createObjectURL(href);
+  }catch(err){
+    try{
+      save_file.href = "data:text/html;charset:UTF-8;base64,"
+                      + btoa(unescape(encodeURIComponent(textarea3.value)));
+    }catch(err){
+      save_file.href = "data:text/html;charset:UTF-8," + encodeURIComponent(textarea3.value);
+    }
+  }
+
+  save_file.click();
+
+  try{
+    self.URL.revokeObjectURL(save_file.href);
+  }catch(err){}
+  save_file.href = "";
+},{capture:false, passive:false, once:false});
+
+
+
+
 // true: folders are listed before bookmarks at every level.
 // false: folders and bookmarks are sorted together by title.
 const folders_first = false;
