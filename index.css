@@ -1,35 +1,97 @@
-*{
-  box-sizing      : border-box;
-  border          : 1px solid gray;
-  outline         : 0px none transparent;
-  border-spacing  : 0pt;
-  border-collapse : collapse;
+* {
+  box-sizing: border-box;
 }
 
-html, body, table, td>*{ height:100%; width:100%; }
-thead{ height:10%; }
-
-html{
-  font-family: monospace;
-  font-size: 12pt;
-  margin:0pt;
-  padding:0pt;
-  background-color:black;
-  color:yellow;
+[hidden] {
+  display: none;
 }
 
-body{
-  margin:0pt;
-  padding:0pt;
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
 }
 
-textarea{
+body {
+  background: #000;
+  color: #ff0;
+  font: 12pt monospace;
+}
+
+main {
+  width: 100%;
+  height: 100%;
+  padding: 0.5rem;
+}
+
+table {
+  width: 100%;
+  height: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid gray;
+  padding: 0.25rem;
+}
+
+thead {
+  height: 5rem;
+}
+
+th {
+  text-align: left;
+  font-weight: normal;
+}
+
+button {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid gray;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #222;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #ff0;
+  outline-offset: -2px;
+}
+
+tbody tr,
+tbody td {
+  height: 100%;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  height: 100%;
+  resize: none;
   overflow: auto;
+  border: 0;
+  padding: 0.5rem;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  white-space: pre;
 }
 
-body,table,tbody,thead,td,tr,button,textarea {
-  background-color:inherit;
-  color:inherit;
-  font-size: inherit;
-  font-family: inherit;
+@media (max-width: 700px) {
+  main {
+    overflow: auto;
+  }
+
+  table {
+    min-width: 600px;
+  }
 }

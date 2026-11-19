@@ -5,31 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bookmark Merger</title>
   <link rel="stylesheet" href="index.css">
-  <input type="file" hidden />
-  <a download="" href="" charset="UTF-8" type="application/octet-stream"></a>
 </head>
 <body>
-<table>
-  <thead>
-    <tr>
-      <td>input 1</td>
-      <td>input 2</td>
-      <td>output</td>
-    </tr>
-    <tr>
-      <td><button data-upload1>📂</button></td>
-      <td><button data-upload2>📂</button></td>
-      <td><button data-download>💾</button></td>
-    </tr>
-  </thead>
-  <tbody>
-  <tr>
-    <td><textarea data-input1></textarea></td>
-    <td><textarea data-input2></textarea></td>
-    <td><textarea data-output readonly></textarea></td>
-  </tr>
-  </tbody>
-</table>
-<script async="async" defer="defer" src="index.js"></script>
+  <main>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Input 1</th>
+          <th scope="col">Input 2</th>
+          <th scope="col">Output</th>
+        </tr>
+        <tr>
+          <td><button type="button" data-upload1 aria-label="Open first bookmark file">📂</button></td>
+          <td><button type="button" data-upload2 aria-label="Open second bookmark file">📂</button></td>
+          <td><button type="button" data-download aria-label="Save merged bookmarks">💾</button></td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><textarea data-input1 aria-label="First bookmark file" spellcheck="false"></textarea></td>
+          <td><textarea data-input2 aria-label="Second bookmark file" spellcheck="false"></textarea></td>
+          <td><textarea data-output aria-label="Merged bookmarks" readonly spellcheck="false"></textarea></td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+
+  <!-- Reused for either input textarea. -->
+  <input type="file" data-file-picker accept=".html,.htm,text/html" hidden>
+
+  <!-- Reused to download the generated output. -->
+  <a data-download-link hidden></a>
+
+  <script defer src="index.js"></script>
 </body>
 </html>
