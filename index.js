@@ -9,13 +9,13 @@ const download_button = document.querySelector('[data-download]');
 const file_picker = document.querySelector('[data-file-picker]');
 const download_link = document.querySelector('[data-download-link]');
 
-const folders_first = true;
-const ignore_leading_symbols = true;
-const ignore_leading_articles = true;
+const is_folders_first = true;
+const is_ignore_leading_symbols = true;
+const is_ignore_leading_articles = true;
 const indent_unit = '    ';
 
-const deduplicate_across_folders = false; // true: keep only the first occurrence of each exact link address in the whole tree.
-const remove_empty_folders = false;       // true: drop folders that end up with no bookmarks, including nested ones.
+const is_deduplicate_across_folders = false; // true: keep only the first occurrence of each exact URL in the whole tree.
+const is_remove_empty_folders = false;       // true: drop folders that end up with no bookmarks, including nested ones.
 
 const illegal_character_pattern = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const skipped_tag_names = new Set([
@@ -35,7 +35,7 @@ const merge_state = {
   root_folder: null,               // Root folder of the merged tree.
   current_folder: null,            // Folder that new bookmarks and sub-folders are added to.
   pending_folder: null,            // Folder opened by the last H3, waiting for its DL.
-  seen_link_addresses: new Set(),  // Exact link addresses already gathered (used when deduplicate_across_folders is on).
+  seen_urls: new Set(),            // Exact URLs already gathered (used when is_deduplicate_across_folders is on).
   output_lines: [],                // Output lines being rendered.
   indent_depth: 1,                 // Current indentation depth while rendering.
   upload_target_textarea: null,    // Textarea waiting for a picked file.
@@ -46,7 +46,7 @@ function reset_merge_state() {
   merge_state.root_folder = create_folder('');
   merge_state.current_folder = merge_state.root_folder;
   merge_state.pending_folder = null;
-  merge_state.seen_link_addresses = new Set();
+  merge_state.seen_urls = new Set();
   merge_state.output_lines = [];
   merge_state.indent_depth = 1;
 }
@@ -54,11 +54,11 @@ function reset_merge_state() {
 function title_sort_key(folder_title) {
   let sort_key = folder_title;
 
-  if (ignore_leading_symbols) {
+  if (is_ignore_leading_symbols) {
     sort_key = sort_key.replace(/^[^\p{L}\p{N}]+/u, '');
   }
 
-  if (ignore_leading_articles) {
+  if (is_ignore_leading_articles) {
     sort_key = sort_key.replace(/^(the|a|an)\s+/i, '');
   }
 
@@ -91,20 +91,20 @@ function find_or_create_folder(folder_title) {
 }
 
 function add_bookmark(anchor_element) {
-  const link_address = anchor_element.getAttribute('href');
+  const url = anchor_element.getAttribute('href');
 
-  if (link_address === null) return;
+  if (url === null) return;
 
-  // Gather step: the first bookmark with a given link address wins; later ones are never added.
-  if (deduplicate_across_folders) {
-    if (merge_state.seen_link_addresses.has(link_address)) return;
-    merge_state.seen_link_addresses.add(link_address);
+  // Gather step: the first bookmark with a given URL wins; later ones are never added.
+  if (is_deduplicate_across_folders) {
+    if (merge_state.seen_urls.has(url)) return;
+    merge_state.seen_urls.add(url);
   }
 
   merge_state.current_folder.children.push({
     node_type: 'bookmark',
     title: anchor_element.textContent,
-    link_address
+    url
   });
 }
 
@@ -150,7 +150,7 @@ function parse_bookmark_html(raw_html) {
 }
 
 function compare_nodes(first_node, second_node) {
-  if (folders_first && first_node.node_type !== second_node.node_type) {
+  if (is_folders_first && first_node.node_type !== second_node.node_type) {
     return first_node.node_type === 'folder' ? -1 : 1;
   }
 
@@ -158,7 +158,7 @@ function compare_nodes(first_node, second_node) {
 }
 
 function tidy_folder(folder) {
-  const seen_link_keys = new Set();
+  const seen_url_keys = new Set();
   const kept_nodes = [];
 
   for (const node of folder.children) {
@@ -167,16 +167,16 @@ function tidy_folder(folder) {
 
       // Children are tidied first, so a folder that only held duplicates or
       // empty sub-folders is already empty by the time it is checked here.
-      if (remove_empty_folders && node.children.length === 0) continue;
+      if (is_remove_empty_folders && node.children.length === 0) continue;
 
       kept_nodes.push(node);
       continue;
     }
 
-    const link_key = node.link_address.toLowerCase();
+    const url_key = node.url.toLowerCase();
 
-    if (!seen_link_keys.has(link_key)) {
-      seen_link_keys.add(link_key);
+    if (!seen_url_keys.has(url_key)) {
+      seen_url_keys.add(url_key);
       kept_nodes.push(node);
     }
   }
@@ -211,7 +211,7 @@ function render_folder(folder) {
       if (current_depth === 1) merge_state.output_lines.push('');
     } else {
       merge_state.output_lines.push(
-        `${indent}<DT><A HREF="${escape_html(node.link_address)}">${escape_html(node.title)}</A>`
+        `${indent}<DT><A HREF="${escape_html(node.url)}">${escape_html(node.title)}</A>`
       );
     }
   }
