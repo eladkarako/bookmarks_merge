@@ -1,223 +1,223 @@
 'use strict';
 
-const input1 = document.querySelector('[data-input1]');
-const input2 = document.querySelector('[data-input2]');
-const output = document.querySelector('[data-output]');
-const upload1 = document.querySelector('[data-upload1]');
-const upload2 = document.querySelector('[data-upload2]');
-const downloadButton = document.querySelector('[data-download]');
-const filePicker = document.querySelector('[data-file-picker]');
-const downloadLink = document.querySelector('[data-download-link]');
+const first_bookmark_textarea = document.querySelector('[data-input1]');
+const second_bookmark_textarea = document.querySelector('[data-input2]');
+const merged_output_textarea = document.querySelector('[data-output]');
+const first_upload_button = document.querySelector('[data-upload1]');
+const second_upload_button = document.querySelector('[data-upload2]');
+const download_button = document.querySelector('[data-download]');
+const file_picker = document.querySelector('[data-file-picker]');
+const download_link = document.querySelector('[data-download-link]');
 
-const foldersFirst = true;
-const ignoreLeadingSymbols = true;
-const ignoreLeadingArticles = true;
-const indentUnit = '    ';
+const folders_first = true;
+const ignore_leading_symbols = true;
+const ignore_leading_articles = true;
+const indent_unit = '    ';
 
-const dedupeAcrossFolders = false; // true: keep only the first occurrence of each exact URL in the whole tree.
-const removeEmptyFolders = false;  // true: drop folders that end up with no bookmarks, including nested ones.
+const deduplicate_across_folders = false; // true: keep only the first occurrence of each exact link address in the whole tree.
+const remove_empty_folders = false;       // true: drop folders that end up with no bookmarks, including nested ones.
 
-const illegalCharacters = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-const skippedTags = new Set([
+const illegal_character_pattern = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+const skipped_tag_names = new Set([
   'SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED',
   'HEAD', 'TITLE', 'META', 'LINK', 'HR'
 ]);
 
-const collator = new Intl.Collator(undefined, {
+const title_collator = new Intl.Collator(undefined, {
   usage: 'sort',
   sensitivity: 'base',
   ignorePunctuation: false,
   numeric: true
 });
 
-// Shared working state for a single merge. Reset at the start of every merge.
-const db = {
-  root: null,           // Root folder of the merged tree.
-  currentFolder: null,  // Folder that new bookmarks and sub-folders are added to.
-  pendingFolder: null,  // Folder opened by the last H3, waiting for its DL.
-  seenUrls: new Set(),  // Exact URLs already gathered (used when dedupeAcrossFolders is on).
-  lines: [],            // Output lines being rendered.
-  depth: 1,             // Current indentation depth while rendering.
-  uploadTarget: null,   // Textarea waiting for a picked file.
-  activeDownloadUrl: null
+// Shared state for a single merge. Reset at the start of every merge.
+const merge_state = {
+  root_folder: null,               // Root folder of the merged tree.
+  current_folder: null,            // Folder that new bookmarks and sub-folders are added to.
+  pending_folder: null,            // Folder opened by the last H3, waiting for its DL.
+  seen_link_addresses: new Set(),  // Exact link addresses already gathered (used when deduplicate_across_folders is on).
+  output_lines: [],                // Output lines being rendered.
+  indent_depth: 1,                 // Current indentation depth while rendering.
+  upload_target_textarea: null,    // Textarea waiting for a picked file.
+  active_download_object_url: null // Object URL of the last generated download, revoked after use.
 };
 
-function resetDb() {
-  db.root = createFolder('');
-  db.currentFolder = db.root;
-  db.pendingFolder = null;
-  db.seenUrls = new Set();
-  db.lines = [];
-  db.depth = 1;
+function reset_merge_state() {
+  merge_state.root_folder = create_folder('');
+  merge_state.current_folder = merge_state.root_folder;
+  merge_state.pending_folder = null;
+  merge_state.seen_link_addresses = new Set();
+  merge_state.output_lines = [];
+  merge_state.indent_depth = 1;
 }
 
-function titleSortKey(title) {
-  let key = title;
+function title_sort_key(folder_title) {
+  let sort_key = folder_title;
 
-  if (ignoreLeadingSymbols) {
-    key = key.replace(/^[^\p{L}\p{N}]+/u, '');
+  if (ignore_leading_symbols) {
+    sort_key = sort_key.replace(/^[^\p{L}\p{N}]+/u, '');
   }
 
-  if (ignoreLeadingArticles) {
-    key = key.replace(/^(the|a|an)\s+/i, '');
+  if (ignore_leading_articles) {
+    sort_key = sort_key.replace(/^(the|a|an)\s+/i, '');
   }
 
-  return key;
+  return sort_key;
 }
 
-function compareTitles(first, second) {
-  const firstKey = titleSortKey(first);
-  const secondKey = titleSortKey(second);
+function compare_titles(first_title, second_title) {
+  const first_sort_key = title_sort_key(first_title);
+  const second_sort_key = title_sort_key(second_title);
 
-  return collator.compare(firstKey, secondKey)
-    || ((firstKey > secondKey) - (firstKey < secondKey));
+  return title_collator.compare(first_sort_key, second_sort_key)
+    || ((first_sort_key > second_sort_key) - (first_sort_key < second_sort_key));
 }
 
-function createFolder(title) {
-  return { kind: 'folder', title, children: [] };
+function create_folder(folder_title) {
+  return { node_type: 'folder', title: folder_title, children: [] };
 }
 
-function findOrCreateFolder(title) {
-  let folder = db.currentFolder.children.find(
-    node => node.kind === 'folder' && node.title === title
+function find_or_create_folder(folder_title) {
+  let matching_folder = merge_state.current_folder.children.find(
+    child_node => child_node.node_type === 'folder' && child_node.title === folder_title
   );
 
-  if (!folder) {
-    folder = createFolder(title);
-    db.currentFolder.children.push(folder);
+  if (!matching_folder) {
+    matching_folder = create_folder(folder_title);
+    merge_state.current_folder.children.push(matching_folder);
   }
 
-  return folder;
+  return matching_folder;
 }
 
-function addBookmark(anchor) {
-  const url = anchor.getAttribute('href');
+function add_bookmark(anchor_element) {
+  const link_address = anchor_element.getAttribute('href');
 
-  if (url === null) return;
+  if (link_address === null) return;
 
-  // Gather step: the first bookmark with a given URL wins; later ones are never added.
-  if (dedupeAcrossFolders) {
-    if (db.seenUrls.has(url)) return;
-    db.seenUrls.add(url);
+  // Gather step: the first bookmark with a given link address wins; later ones are never added.
+  if (deduplicate_across_folders) {
+    if (merge_state.seen_link_addresses.has(link_address)) return;
+    merge_state.seen_link_addresses.add(link_address);
   }
 
-  db.currentFolder.children.push({
-    kind: 'bookmark',
-    title: anchor.textContent,
-    url
+  merge_state.current_folder.children.push({
+    node_type: 'bookmark',
+    title: anchor_element.textContent,
+    link_address
   });
 }
 
-function collectBookmarks(element) {
-  for (const child of element.children) {
-    const tagName = child.tagName;
+function collect_bookmarks(parent_element) {
+  for (const child_element of parent_element.children) {
+    const tag_name = child_element.tagName;
 
-    if (skippedTags.has(tagName)) continue;
+    if (skipped_tag_names.has(tag_name)) continue;
 
-    if (tagName === 'H3') {
-      db.pendingFolder = findOrCreateFolder(child.textContent);
-    } else if (tagName === 'A') {
-      addBookmark(child);
-    } else if (tagName === 'DL') {
-      const ownerFolder = db.pendingFolder || db.currentFolder;
-      const previousFolder = db.currentFolder;
+    if (tag_name === 'H3') {
+      merge_state.pending_folder = find_or_create_folder(child_element.textContent);
+    } else if (tag_name === 'A') {
+      add_bookmark(child_element);
+    } else if (tag_name === 'DL') {
+      const owner_folder = merge_state.pending_folder || merge_state.current_folder;
+      const previous_folder = merge_state.current_folder;
 
-      db.pendingFolder = null;
-      db.currentFolder = ownerFolder;
-      collectBookmarks(child);
-      db.currentFolder = previousFolder;
+      merge_state.pending_folder = null;
+      merge_state.current_folder = owner_folder;
+      collect_bookmarks(child_element);
+      merge_state.current_folder = previous_folder;
     } else {
-      collectBookmarks(child);
+      collect_bookmarks(child_element);
     }
   }
 }
 
-function parseInto(rawHtml) {
-  const cleanedHtml = rawHtml
+function parse_bookmark_html(raw_html) {
+  const cleaned_html = raw_html
     .replace(/^\uFEFF/, '')
-    .replace(illegalCharacters, '');
+    .replace(illegal_character_pattern, '');
 
-  if (!cleanedHtml.trim()) return;
+  if (!cleaned_html.trim()) return;
 
-  const parsedDocument = new DOMParser().parseFromString(
-    cleanedHtml,
+  const parsed_document = new DOMParser().parseFromString(
+    cleaned_html,
     'text/html'
   );
 
-  db.currentFolder = db.root;
-  db.pendingFolder = null;
-  collectBookmarks(parsedDocument.body);
+  merge_state.current_folder = merge_state.root_folder;
+  merge_state.pending_folder = null;
+  collect_bookmarks(parsed_document.body);
 }
 
-function compareNodes(first, second) {
-  if (foldersFirst && first.kind !== second.kind) {
-    return first.kind === 'folder' ? -1 : 1;
+function compare_nodes(first_node, second_node) {
+  if (folders_first && first_node.node_type !== second_node.node_type) {
+    return first_node.node_type === 'folder' ? -1 : 1;
   }
 
-  return compareTitles(first.title, second.title);
+  return compare_titles(first_node.title, second_node.title);
 }
 
-function tidyFolder(folder) {
-  const seenUrls = new Set();
-  const keptNodes = [];
+function tidy_folder(folder) {
+  const seen_link_keys = new Set();
+  const kept_nodes = [];
 
   for (const node of folder.children) {
-    if (node.kind === 'folder') {
-      tidyFolder(node);
+    if (node.node_type === 'folder') {
+      tidy_folder(node);
 
       // Children are tidied first, so a folder that only held duplicates or
       // empty sub-folders is already empty by the time it is checked here.
-      if (removeEmptyFolders && node.children.length === 0) continue;
+      if (remove_empty_folders && node.children.length === 0) continue;
 
-      keptNodes.push(node);
+      kept_nodes.push(node);
       continue;
     }
 
-    const urlKey = node.url.toLowerCase();
+    const link_key = node.link_address.toLowerCase();
 
-    if (!seenUrls.has(urlKey)) {
-      seenUrls.add(urlKey);
-      keptNodes.push(node);
+    if (!seen_link_keys.has(link_key)) {
+      seen_link_keys.add(link_key);
+      kept_nodes.push(node);
     }
   }
 
-  keptNodes.sort(compareNodes);
-  folder.children = keptNodes;
+  kept_nodes.sort(compare_nodes);
+  folder.children = kept_nodes;
 }
 
-function escapeHtml(text) {
-  return String(text)
+function escape_html(text_to_escape) {
+  return String(text_to_escape)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
 
-function renderFolder(folder) {
-  const depth = db.depth;
-  const indent = indentUnit.repeat(depth);
+function render_folder(folder) {
+  const current_depth = merge_state.indent_depth;
+  const indent = indent_unit.repeat(current_depth);
 
   for (const node of folder.children) {
-    if (node.kind === 'folder') {
-      db.lines.push(`${indent}<DT><H3>${escapeHtml(node.title)}</H3>`);
-      db.lines.push(`${indent}<DL><p>`);
+    if (node.node_type === 'folder') {
+      merge_state.output_lines.push(`${indent}<DT><H3>${escape_html(node.title)}</H3>`);
+      merge_state.output_lines.push(`${indent}<DL><p>`);
 
-      db.depth++;
-      renderFolder(node);
-      db.depth--;
+      merge_state.indent_depth++;
+      render_folder(node);
+      merge_state.indent_depth--;
 
-      db.lines.push(`${indent}</DL><p>`);
+      merge_state.output_lines.push(`${indent}</DL><p>`);
 
-      if (depth === 1) db.lines.push('');
+      if (current_depth === 1) merge_state.output_lines.push('');
     } else {
-      db.lines.push(
-        `${indent}<DT><A HREF="${escapeHtml(node.url)}">${escapeHtml(node.title)}</A>`
+      merge_state.output_lines.push(
+        `${indent}<DT><A HREF="${escape_html(node.link_address)}">${escape_html(node.title)}</A>`
       );
     }
   }
 }
 
-function buildHeader() {
+function build_header() {
   return [
     '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
     `<!-- Merged bookmarks, generated ${new Date().toISOString()} -->`,
@@ -229,85 +229,85 @@ function buildHeader() {
   ];
 }
 
-function mergeBookmarks() {
-  if (!input1.value.trim() && !input2.value.trim()) {
-    output.value = '';
+function merge_bookmarks() {
+  if (!first_bookmark_textarea.value.trim() && !second_bookmark_textarea.value.trim()) {
+    merged_output_textarea.value = '';
     return;
   }
 
   try {
-    resetDb();
+    reset_merge_state();
 
-    parseInto(input1.value);
-    parseInto(input2.value);
-    tidyFolder(db.root);
+    parse_bookmark_html(first_bookmark_textarea.value);
+    parse_bookmark_html(second_bookmark_textarea.value);
+    tidy_folder(merge_state.root_folder);
 
-    db.lines = buildHeader();
-    db.lines.push('<DL><p>');
-    renderFolder(db.root);
-    db.lines.push('</DL><p>', '');
+    merge_state.output_lines = build_header();
+    merge_state.output_lines.push('<DL><p>');
+    render_folder(merge_state.root_folder);
+    merge_state.output_lines.push('</DL><p>', '');
 
-    output.value = db.lines.join('\n');
+    merged_output_textarea.value = merge_state.output_lines.join('\n');
   } catch (error) {
-    output.value = `<!-- Merge failed: ${error.message} -->`;
+    merged_output_textarea.value = `<!-- Merge failed: ${error.message} -->`;
   }
 }
 
-function openFile(target) {
-  db.uploadTarget = target;
-  filePicker.value = '';
-  filePicker.click();
+function open_file_picker(target_textarea) {
+  merge_state.upload_target_textarea = target_textarea;
+  file_picker.value = '';
+  file_picker.click();
 }
 
-upload1.addEventListener('click', () => openFile(input1));
-upload2.addEventListener('click', () => openFile(input2));
+first_upload_button.addEventListener('click', () => open_file_picker(first_bookmark_textarea));
+second_upload_button.addEventListener('click', () => open_file_picker(second_bookmark_textarea));
 
-filePicker.addEventListener('change', async () => {
-  const file = filePicker.files?.[0];
+file_picker.addEventListener('change', async () => {
+  const selected_file = file_picker.files?.[0];
 
-  if (!file || !db.uploadTarget) return;
+  if (!selected_file || !merge_state.upload_target_textarea) return;
 
   try {
-    db.uploadTarget.value = await file.text();
-    mergeBookmarks();
+    merge_state.upload_target_textarea.value = await selected_file.text();
+    merge_bookmarks();
   } catch (error) {
-    output.value = `<!-- Could not read file: ${error.message} -->`;
+    merged_output_textarea.value = `<!-- Could not read file: ${error.message} -->`;
   } finally {
-    db.uploadTarget = null;
+    merge_state.upload_target_textarea = null;
   }
 });
 
-input1.addEventListener('input', mergeBookmarks);
-input2.addEventListener('input', mergeBookmarks);
+first_bookmark_textarea.addEventListener('input', merge_bookmarks);
+second_bookmark_textarea.addEventListener('input', merge_bookmarks);
 
-downloadButton.addEventListener('click', () => {
-  if (!output.value) return;
+download_button.addEventListener('click', () => {
+  if (!merged_output_textarea.value) return;
 
-  const now = new Date();
-  const filename = `${now.toISOString()
+  const current_time = new Date();
+  const download_file_name = `${current_time.toISOString()
     .replace(/\..*$/, '')
     .replace(/[-:]/g, '')
     .replace('T', '_')}.html`;
 
-  if (db.activeDownloadUrl) {
-    URL.revokeObjectURL(db.activeDownloadUrl);
+  if (merge_state.active_download_object_url) {
+    URL.revokeObjectURL(merge_state.active_download_object_url);
   }
 
-  db.activeDownloadUrl = URL.createObjectURL(new Blob(
-    [output.value],
+  merge_state.active_download_object_url = URL.createObjectURL(new Blob(
+    [merged_output_textarea.value],
     { type: 'text/html;charset=UTF-8' }
   ));
 
-  downloadLink.href = db.activeDownloadUrl;
-  downloadLink.download = filename;
-  downloadLink.click();
+  download_link.href = merge_state.active_download_object_url;
+  download_link.download = download_file_name;
+  download_link.click();
 
   // Revoke after the browser has had a chance to start the download.
   setTimeout(() => {
-    if (db.activeDownloadUrl) {
-      URL.revokeObjectURL(db.activeDownloadUrl);
-      db.activeDownloadUrl = null;
-      downloadLink.removeAttribute('href');
+    if (merge_state.active_download_object_url) {
+      URL.revokeObjectURL(merge_state.active_download_object_url);
+      merge_state.active_download_object_url = null;
+      download_link.removeAttribute('href');
     }
   }, 1000);
 });
