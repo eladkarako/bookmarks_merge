@@ -1,23 +1,13 @@
 'use strict';
 
-const get_required_element = selector => {
-  const element = document.querySelector(selector);
-
-  if (!element) {
-    throw new Error(`Required element not found: ${selector}`);
-  }
-
-  return element;
-};
-
-const first_bookmark_textarea = get_required_element('[data-input1]');
-const second_bookmark_textarea = get_required_element('[data-input2]');
-const merged_output_textarea = get_required_element('[data-output]');
-const first_upload_button = get_required_element('[data-upload1]');
-const second_upload_button = get_required_element('[data-upload2]');
-const download_button = get_required_element('[data-download]');
-const file_picker = get_required_element('[data-file-picker]');
-const download_link = get_required_element('[data-download-link]');
+const first_bookmark_textarea = document.querySelector('[data-input1]');
+const second_bookmark_textarea = document.querySelector('[data-input2]');
+const merged_output_textarea = document.querySelector('[data-output]');
+const first_upload_button = document.querySelector('[data-upload1]');
+const second_upload_button = document.querySelector('[data-upload2]');
+const download_button = document.querySelector('[data-download]');
+const file_picker = document.querySelector('[data-file-picker]');
+const download_link = document.querySelector('[data-download-link]');
 
 const is_folders_first = true;
 const is_ignore_leading_symbols = true;
@@ -34,7 +24,7 @@ const is_trim_titles = true;                  // true: trim leading/trailing whi
 const is_ignore_bookmarks_without_url = true; // true: drop bookmarks whose href is missing or empty.
 const is_normalize_url = true;                // true: re-construct URLs, remove trailing "/" suffix, remove duplicated query arguments (order preserved).
 const is_https_everywhere = true;             // true: upgrade http:// to https:// except for localhost and private network IPs.
-const is_normalize_titles = false;            // true: remove non-ASCII (emoji etc.), control characters and non-viable unicode, unify whitespace to a single space.
+const is_normalize_titles = true;             // true: remove non-ASCII (emoji etc.), control characters and non-viable unicode, unify whitespace to a single space.
 
 const illegal_character_pattern = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const skipped_tag_names = new Set([
@@ -69,11 +59,16 @@ const reset_merge_state = () => {
   merge_state.seen_urls = new Set();
 };
 
+
 const normalize_title_text = raw_title => raw_title
-  .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ') // Control characters (including tab and newline) become spaces.
-  .replace(/[^\u0020-\u007E]/g, '')              // Remove all non-ASCII characters (emoji, non-viable unicode, etc.).
-  .replace(/\s+/g, ' ')                          // Unify runs of whitespace to a single space.
+  .replace(/[\p{Cc}\u2028\u2029]/gu, ' ')                 // Control characters (incl. tab, newline, DEL, C1) become spaces.
+  .replace(/[\p{Cn}\p{Co}\p{Cs}]/gu, '')                  // Unassigned, private-use, and lone surrogate code points are removed.
+  .replace(/[\u00AD\u200B\u2060\uFEFF\u202A-\u202E\u2066-\u2069]/g, '') // Invisible format characters are removed.
+  .replace(/(?<=[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F])\u200D|\u200D(?=[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Emoji_Modifier}])/gu, '') // Joiners that link emoji sequences.
+  .replace(/[\p{Emoji_Presentation}\p{Emoji_Modifier}\p{Regional_Indicator}\uFE0F\u20E3]/gu, '') // Emoji, skin tones, flags, variation selectors, keycaps.
+  .replace(/\s+/g, ' ')                                   // Unify runs of whitespace to a single space.
   .trim();
+
 
 const prepare_title = raw_title => {
   const trimmed_title = is_trim_titles ? raw_title.trim() : raw_title;
