@@ -14,6 +14,7 @@ const is_ignore_leading_symbols = true;
 const is_ignore_leading_articles = true;
 const indent_unit = '    ';
 
+const is_ignore_about_blank_bookmarks = true; // true: drop bookmarks whose URL is about:blank.
 const is_deduplicate_across_folders = true; // true: keep only the first occurrence of each exact URL in the whole tree.
 const is_remove_empty_folders = true;       // true: drop folders that end up with no bookmarks, including nested ones.
 
@@ -167,6 +168,10 @@ function prepare_url(raw_url) {
   return url_text;
 }
 
+function is_about_blank_url(url_text) {
+  return /^about:blank\/*$/i.test(url_text.trim());
+}
+
 function compare_titles(first_title, second_title) {
   const first_sort_key = title_sort_key(first_title);
   const second_sort_key = title_sort_key(second_title);
@@ -212,6 +217,9 @@ function add_bookmark(anchor_element) {
 
   if (!url && is_ignore_bookmarks_without_url) return;
 
+  // about:blank bookmarks are dropped before they can take part in uniquification.
+  if (is_ignore_about_blank_bookmarks && is_about_blank_url(url)) return;
+
   // Gather step: the first bookmark with a given URL wins; later ones are never added.
   if (is_deduplicate_across_folders && url) {
     if (merge_state.seen_urls.has(url)) return;
@@ -224,6 +232,7 @@ function add_bookmark(anchor_element) {
     url
   });
 }
+
 
 function collect_bookmarks(parent_element) {
   for (const child_element of parent_element.children) {
