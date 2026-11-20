@@ -14,6 +14,9 @@ const ignoreLeadingSymbols = true;
 const ignoreLeadingArticles = true;
 const indentUnit = '    ';
 
+const dedupeAcrossFolders = false; // true: keep only the first occurrence of each exact URL in the whole tree.
+const removeEmptyFolders = false;  // true: drop folders that end up with no bookmarks, including nested ones.
+
 const illegalCharacters = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const skippedTags = new Set([
   'SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED',
@@ -69,10 +72,16 @@ function findOrCreateFolder(parent, title) {
   return folder;
 }
 
-function addBookmark(anchor, folder) {
+function addBookmark(anchor, folder, state) {
   const url = anchor.getAttribute('href');
 
   if (url === null) return;
+
+  // Gather step: the first bookmark with a given URL wins; later ones are never added.
+  if (dedupeAcrossFolders) {
+    if (state.seenUrls.has(url)) return;
+    state.seenUrls.add(url);
+  }
 
   folder.children.push({
     kind: 'bookmark',
@@ -93,7 +102,7 @@ function collectBookmarks(element, targetFolder, state) {
         child.textContent
       );
     } else if (tagName === 'A') {
-      addBookmark(child, targetFolder);
+      addBookmark(child, targetFolder, state);
     } else if (tagName === 'DL') {
       const ownerFolder = state.pendingFolder || targetFolder;
       state.pendingFolder = null;
@@ -104,7 +113,7 @@ function collectBookmarks(element, targetFolder, state) {
   }
 }
 
-function parseInto(rawHtml, rootFolder) {
+function parseInto(rawHtml, rootFolder, seenUrls) {
   const cleanedHtml = rawHtml
     .replace(/^\uFEFF/, '')
     .replace(illegalCharacters, '');
@@ -117,7 +126,8 @@ function parseInto(rawHtml, rootFolder) {
   );
 
   collectBookmarks(parsedDocument.body, rootFolder, {
-    pendingFolder: null
+    pendingFolder: null,
+    seenUrls
   });
 }
 
@@ -136,6 +146,11 @@ function tidyFolder(folder) {
   for (const node of folder.children) {
     if (node.kind === 'folder') {
       tidyFolder(node);
+
+      // Children are tidied first, so a folder that only held duplicates or
+      // empty sub-folders is already empty by the time it is checked here.
+      if (removeEmptyFolders && node.children.length === 0) continue;
+
       keptNodes.push(node);
       continue;
     }
@@ -199,8 +214,10 @@ function mergeBookmarks() {
 
   try {
     const rootFolder = createFolder('');
-    parseInto(input1.value, rootFolder);
-    parseInto(input2.value, rootFolder);
+    const seenUrls = new Set();
+
+    parseInto(input1.value, rootFolder, seenUrls);
+    parseInto(input2.value, rootFolder, seenUrls);
     tidyFolder(rootFolder);
 
     const lines = buildHeader();
