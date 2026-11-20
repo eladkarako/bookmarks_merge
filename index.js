@@ -14,8 +14,16 @@ const is_ignore_leading_symbols = true;
 const is_ignore_leading_articles = true;
 const indent_unit = '    ';
 
-const is_deduplicate_across_folders = false; // true: keep only the first occurrence of each exact URL in the whole tree.
-const is_remove_empty_folders = false;       // true: drop folders that end up with no bookmarks, including nested ones.
+const is_deduplicate_across_folders = true; // true: keep only the first occurrence of each exact URL in the whole tree.
+const is_remove_empty_folders = true;       // true: drop folders that end up with no bookmarks, including nested ones.
+
+// Cleaning switches. Titles are cleaned during the gather step, before sorting.
+// URLs are cleaned during the gather step, before any uniquification.
+const is_trim_titles = true;                // true: trim leading/trailing whitespace from folder and bookmark titles.
+const is_ignore_bookmarks_without_url = true; // true: drop bookmarks whose href is missing or empty.
+const is_normalize_url = true;              // true: re-construct URLs, remove trailing "/" suffix, remove duplicated query arguments (order preserved).
+const is_https_everywhere = true;           // true: upgrade http:// to https:// except for localhost and private network IPs.
+const is_normalize_titles = false;           // true: remove non-ASCII (emoji etc.), control characters and non-viable unicode, unify whitespace to a single space.
 
 const illegal_character_pattern = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const skipped_tag_names = new Set([
@@ -51,6 +59,122 @@ function reset_merge_state() {
   merge_state.indent_depth = 1;
 }
 
+function normalize_title_text(raw_title) {
+  return raw_title
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ') // Control characters (including tab and newline) become spaces.
+    .replace(/[^\u0020-\u007E]/g, '')              // Remove all non-ASCII characters (emoji, non-viable unicode, etc.).
+    .replace(/\s+/g, ' ')                          // Unify runs of whitespace to a single space.
+    .trim();
+}
+
+function prepare_title(raw_title) {
+  let cleaned_title = raw_title;
+
+  if (is_trim_titles) {
+    cleaned_title = cleaned_title.trim();
+  }
+
+  if (is_normalize_titles) {
+    cleaned_title = normalize_title_text(cleaned_title);
+  }
+
+  return cleaned_title;
+}
+
+function is_local_or_private_host(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+
+  if (host.includes(':')) {
+    // IPv6: loopback (::1), unique local (fc00::/7), link-local (fe80::/10).
+    return host === '::1' || /^f[cd]/.test(host) || /^fe[89ab]/.test(host);
+  }
+
+  const ipv4_match = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (!ipv4_match) return false;
+
+  const first_octet = Number(ipv4_match[1]);
+  const second_octet = Number(ipv4_match[2]);
+
+  return first_octet === 127
+    || first_octet === 10
+    || (first_octet === 172 && second_octet >= 16 && second_octet <= 31)
+    || (first_octet === 192 && second_octet === 168);
+}
+
+function upgrade_to_https(url_text) {
+  let parsed_url;
+
+  try {
+    parsed_url = new URL(url_text);
+  } catch {
+    return url_text;
+  }
+
+  if (parsed_url.protocol !== 'http:' || is_local_or_private_host(parsed_url.hostname)) {
+    return url_text;
+  }
+
+  // The scheme is the text before the first colon, so only that part is replaced.
+  return 'https:' + url_text.slice(url_text.indexOf(':') + 1);
+}
+
+function normalize_url_text(url_text) {
+  let parsed_url;
+
+  try {
+    parsed_url = new URL(url_text);
+  } catch {
+    return url_text;
+  }
+
+  // Remove trailing "/" from the path.
+  parsed_url.pathname = parsed_url.pathname.replace(/\/+$/, '');
+
+  // Remove duplicated query arguments (identical name and value), keeping the first occurrence and the original order.
+  const seen_argument_keys = new Set();
+  const kept_arguments = new URLSearchParams();
+
+  for (const [argument_name, argument_value] of parsed_url.searchParams) {
+    const argument_key = JSON.stringify([argument_name, argument_value]);
+
+    if (!seen_argument_keys.has(argument_key)) {
+      seen_argument_keys.add(argument_key);
+      kept_arguments.append(argument_name, argument_value);
+    }
+  }
+
+  parsed_url.search = kept_arguments.toString();
+
+  // The URL API adds "/" to bare origins, so strip any remaining trailing slashes before "?" or "#".
+  return parsed_url.href.replace(/\/+(?=$|[?#])/, '');
+}
+
+function prepare_url(raw_url) {
+  let url_text = raw_url.trim();
+
+  if (!url_text) return '';
+
+  if (is_https_everywhere) {
+    url_text = upgrade_to_https(url_text);
+  }
+
+  if (is_normalize_url) {
+    url_text = normalize_url_text(url_text);
+  }
+
+  return url_text;
+}
+
+function compare_titles(first_title, second_title) {
+  const first_sort_key = title_sort_key(first_title);
+  const second_sort_key = title_sort_key(second_title);
+
+  return title_collator.compare(first_sort_key, second_sort_key)
+    || ((first_sort_key > second_sort_key) - (first_sort_key < second_sort_key));
+}
+
 function title_sort_key(folder_title) {
   let sort_key = folder_title;
 
@@ -63,14 +187,6 @@ function title_sort_key(folder_title) {
   }
 
   return sort_key;
-}
-
-function compare_titles(first_title, second_title) {
-  const first_sort_key = title_sort_key(first_title);
-  const second_sort_key = title_sort_key(second_title);
-
-  return title_collator.compare(first_sort_key, second_sort_key)
-    || ((first_sort_key > second_sort_key) - (first_sort_key < second_sort_key));
 }
 
 function create_folder(folder_title) {
@@ -91,19 +207,20 @@ function find_or_create_folder(folder_title) {
 }
 
 function add_bookmark(anchor_element) {
-  const url = anchor_element.getAttribute('href');
+  // URL cleaning runs here, during gathering, so the uniquification phases see the cleaned URL.
+  const url = prepare_url(anchor_element.getAttribute('href') ?? '');
 
-  if (url === null) return;
+  if (!url && is_ignore_bookmarks_without_url) return;
 
   // Gather step: the first bookmark with a given URL wins; later ones are never added.
-  if (is_deduplicate_across_folders) {
+  if (is_deduplicate_across_folders && url) {
     if (merge_state.seen_urls.has(url)) return;
     merge_state.seen_urls.add(url);
   }
 
   merge_state.current_folder.children.push({
     node_type: 'bookmark',
-    title: anchor_element.textContent,
+    title: prepare_title(anchor_element.textContent),
     url
   });
 }
@@ -115,7 +232,7 @@ function collect_bookmarks(parent_element) {
     if (skipped_tag_names.has(tag_name)) continue;
 
     if (tag_name === 'H3') {
-      merge_state.pending_folder = find_or_create_folder(child_element.textContent);
+      merge_state.pending_folder = find_or_create_folder(prepare_title(child_element.textContent));
     } else if (tag_name === 'A') {
       add_bookmark(child_element);
     } else if (tag_name === 'DL') {
@@ -174,6 +291,12 @@ function tidy_folder(folder) {
     }
 
     const url_key = node.url.toLowerCase();
+
+    // Bookmarks without a URL (only kept when the ignore switch is off) are never treated as duplicates.
+    if (!url_key) {
+      kept_nodes.push(node);
+      continue;
+    }
 
     if (!seen_url_keys.has(url_key)) {
       seen_url_keys.add(url_key);
