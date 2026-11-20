@@ -30,8 +30,26 @@ const collator = new Intl.Collator(undefined, {
   numeric: true
 });
 
-let uploadTarget = null;
-let activeDownloadUrl = null;
+// Shared working state for a single merge. Reset at the start of every merge.
+const db = {
+  root: null,           // Root folder of the merged tree.
+  currentFolder: null,  // Folder that new bookmarks and sub-folders are added to.
+  pendingFolder: null,  // Folder opened by the last H3, waiting for its DL.
+  seenUrls: new Set(),  // Exact URLs already gathered (used when dedupeAcrossFolders is on).
+  lines: [],            // Output lines being rendered.
+  depth: 1,             // Current indentation depth while rendering.
+  uploadTarget: null,   // Textarea waiting for a picked file.
+  activeDownloadUrl: null
+};
+
+function resetDb() {
+  db.root = createFolder('');
+  db.currentFolder = db.root;
+  db.pendingFolder = null;
+  db.seenUrls = new Set();
+  db.lines = [];
+  db.depth = 1;
+}
 
 function titleSortKey(title) {
   let key = title;
@@ -59,61 +77,62 @@ function createFolder(title) {
   return { kind: 'folder', title, children: [] };
 }
 
-function findOrCreateFolder(parent, title) {
-  let folder = parent.children.find(
+function findOrCreateFolder(title) {
+  let folder = db.currentFolder.children.find(
     node => node.kind === 'folder' && node.title === title
   );
 
   if (!folder) {
     folder = createFolder(title);
-    parent.children.push(folder);
+    db.currentFolder.children.push(folder);
   }
 
   return folder;
 }
 
-function addBookmark(anchor, folder, state) {
+function addBookmark(anchor) {
   const url = anchor.getAttribute('href');
 
   if (url === null) return;
 
   // Gather step: the first bookmark with a given URL wins; later ones are never added.
   if (dedupeAcrossFolders) {
-    if (state.seenUrls.has(url)) return;
-    state.seenUrls.add(url);
+    if (db.seenUrls.has(url)) return;
+    db.seenUrls.add(url);
   }
 
-  folder.children.push({
+  db.currentFolder.children.push({
     kind: 'bookmark',
     title: anchor.textContent,
     url
   });
 }
 
-function collectBookmarks(element, targetFolder, state) {
+function collectBookmarks(element) {
   for (const child of element.children) {
     const tagName = child.tagName;
 
     if (skippedTags.has(tagName)) continue;
 
     if (tagName === 'H3') {
-      state.pendingFolder = findOrCreateFolder(
-        targetFolder,
-        child.textContent
-      );
+      db.pendingFolder = findOrCreateFolder(child.textContent);
     } else if (tagName === 'A') {
-      addBookmark(child, targetFolder, state);
+      addBookmark(child);
     } else if (tagName === 'DL') {
-      const ownerFolder = state.pendingFolder || targetFolder;
-      state.pendingFolder = null;
-      collectBookmarks(child, ownerFolder, state);
+      const ownerFolder = db.pendingFolder || db.currentFolder;
+      const previousFolder = db.currentFolder;
+
+      db.pendingFolder = null;
+      db.currentFolder = ownerFolder;
+      collectBookmarks(child);
+      db.currentFolder = previousFolder;
     } else {
-      collectBookmarks(child, targetFolder, state);
+      collectBookmarks(child);
     }
   }
 }
 
-function parseInto(rawHtml, rootFolder, seenUrls) {
+function parseInto(rawHtml) {
   const cleanedHtml = rawHtml
     .replace(/^\uFEFF/, '')
     .replace(illegalCharacters, '');
@@ -125,10 +144,9 @@ function parseInto(rawHtml, rootFolder, seenUrls) {
     'text/html'
   );
 
-  collectBookmarks(parsedDocument.body, rootFolder, {
-    pendingFolder: null,
-    seenUrls
-  });
+  db.currentFolder = db.root;
+  db.pendingFolder = null;
+  collectBookmarks(parsedDocument.body);
 }
 
 function compareNodes(first, second) {
@@ -175,19 +193,24 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
-function renderFolder(folder, depth, lines) {
+function renderFolder(folder) {
+  const depth = db.depth;
   const indent = indentUnit.repeat(depth);
 
   for (const node of folder.children) {
     if (node.kind === 'folder') {
-      lines.push(`${indent}<DT><H3>${escapeHtml(node.title)}</H3>`);
-      lines.push(`${indent}<DL><p>`);
-      renderFolder(node, depth + 1, lines);
-      lines.push(`${indent}</DL><p>`);
+      db.lines.push(`${indent}<DT><H3>${escapeHtml(node.title)}</H3>`);
+      db.lines.push(`${indent}<DL><p>`);
 
-      if (depth === 1) lines.push('');
+      db.depth++;
+      renderFolder(node);
+      db.depth--;
+
+      db.lines.push(`${indent}</DL><p>`);
+
+      if (depth === 1) db.lines.push('');
     } else {
-      lines.push(
+      db.lines.push(
         `${indent}<DT><A HREF="${escapeHtml(node.url)}">${escapeHtml(node.title)}</A>`
       );
     }
@@ -213,26 +236,25 @@ function mergeBookmarks() {
   }
 
   try {
-    const rootFolder = createFolder('');
-    const seenUrls = new Set();
+    resetDb();
 
-    parseInto(input1.value, rootFolder, seenUrls);
-    parseInto(input2.value, rootFolder, seenUrls);
-    tidyFolder(rootFolder);
+    parseInto(input1.value);
+    parseInto(input2.value);
+    tidyFolder(db.root);
 
-    const lines = buildHeader();
-    lines.push('<DL><p>');
-    renderFolder(rootFolder, 1, lines);
-    lines.push('</DL><p>', '');
+    db.lines = buildHeader();
+    db.lines.push('<DL><p>');
+    renderFolder(db.root);
+    db.lines.push('</DL><p>', '');
 
-    output.value = lines.join('\n');
+    output.value = db.lines.join('\n');
   } catch (error) {
     output.value = `<!-- Merge failed: ${error.message} -->`;
   }
 }
 
 function openFile(target) {
-  uploadTarget = target;
+  db.uploadTarget = target;
   filePicker.value = '';
   filePicker.click();
 }
@@ -243,15 +265,15 @@ upload2.addEventListener('click', () => openFile(input2));
 filePicker.addEventListener('change', async () => {
   const file = filePicker.files?.[0];
 
-  if (!file || !uploadTarget) return;
+  if (!file || !db.uploadTarget) return;
 
   try {
-    uploadTarget.value = await file.text();
+    db.uploadTarget.value = await file.text();
     mergeBookmarks();
   } catch (error) {
     output.value = `<!-- Could not read file: ${error.message} -->`;
   } finally {
-    uploadTarget = null;
+    db.uploadTarget = null;
   }
 });
 
@@ -267,24 +289,24 @@ downloadButton.addEventListener('click', () => {
     .replace(/[-:]/g, '')
     .replace('T', '_')}.html`;
 
-  if (activeDownloadUrl) {
-    URL.revokeObjectURL(activeDownloadUrl);
+  if (db.activeDownloadUrl) {
+    URL.revokeObjectURL(db.activeDownloadUrl);
   }
 
-  activeDownloadUrl = URL.createObjectURL(new Blob(
+  db.activeDownloadUrl = URL.createObjectURL(new Blob(
     [output.value],
     { type: 'text/html;charset=UTF-8' }
   ));
 
-  downloadLink.href = activeDownloadUrl;
+  downloadLink.href = db.activeDownloadUrl;
   downloadLink.download = filename;
   downloadLink.click();
 
   // Revoke after the browser has had a chance to start the download.
   setTimeout(() => {
-    if (activeDownloadUrl) {
-      URL.revokeObjectURL(activeDownloadUrl);
-      activeDownloadUrl = null;
+    if (db.activeDownloadUrl) {
+      URL.revokeObjectURL(db.activeDownloadUrl);
+      db.activeDownloadUrl = null;
       downloadLink.removeAttribute('href');
     }
   }, 1000);
